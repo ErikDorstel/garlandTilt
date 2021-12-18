@@ -11,4 +11,4 @@ ESP32 based tilt sensor with ring led display
 #### led ring serial in
 * GPIO 15
 #### Development Hardware
-![IMAGE ALT TEXT HERE](https://www.dorstel.de/github/garlandClock_b_v1.0.png)
+![IMAGE ALT TEXT HERE](https://www.dorstel.de/github/garlandTilt_v1.0.png)
