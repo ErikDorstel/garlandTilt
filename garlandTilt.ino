@@ -2,17 +2,18 @@
 #define gpio 15 // serial in led ring
 Adafruit_NeoPixel ring=Adafruit_NeoPixel(60,gpio,NEO_GRB+NEO_KHZ800);
 
-#include <Adafruit_MPU6050.h>
-#include <Adafruit_Sensor.h>
-#include <Wire.h>
+//get library from https://github.com/jrowberg/i2cdevlib/tree/master/Arduino/I2Cdev and
+//get library from https://github.com/jrowberg/i2cdevlib/tree/master/Arduino/MPU6050
+#include "MPU6050_6Axis_MotionApps612.h"
 
 TwoWire I2Ctwo=TwoWire(1);
-Adafruit_MPU6050 mpu;
-const float RADtoDEG=57.29577951308232;
+MPU6050 mpu(0x68,&I2Ctwo);
 
-struct tiltStruct { float x; float y; float d; float xy; float ax; float ay; float az; float cax; float cay; float caz; };
+struct tiltStruct { float x; float y; float z; float d; float xy; };
 struct tiltStruct tilt;
-unsigned long tiltTimer; int tiltCalibrateCount;
+unsigned long tiltTimer=millis()+100;
+
+uint8_t fifoBuffer[64]; Quaternion q; VectorFloat gravity; float ypr[3];
 int red=ring.Color(5,0,0); int green=ring.Color(0,5,0); int blue=ring.Color(0,0,5);
 
 void addPixelColor(int index,int rA,int gA,int bA) {
@@ -36,32 +37,28 @@ void span(int index,int count,bool mode,int colorA,int colorB) {
     if (mode==false) { r*=-1; g*=-1; b*=-1; }
     addPixelColor(y,r,g,b); } }
 
-float wrap180(float value) {
-  while (value>+180) { value-=360; }
-  while (value<-180) { value+=360; }
-  return value; }
-
-void calibrateTilt() { tilt.cax=tilt.ax; tilt.cay=tilt.ay; tilt.caz=tilt.az-9.81; }
+void calibrateTilt() { mpu.CalibrateAccel(6); mpu.CalibrateGyro(6); mpu.PrintActiveOffsets(); }
 
 void tiltWorker() {
-  if (millis()>=tiltTimer) { tiltTimer=millis()+100; tiltCalibrateCount++;
-    if (tiltCalibrateCount==50) { calibrateTilt(); }
-    sensors_event_t a,g,t; mpu.getEvent(&a,&g,&t);
-    tilt.ax=(tilt.ax+a.acceleration.x)/2; tilt.ay=(tilt.ay+a.acceleration.y)/2; tilt.az=(tilt.az+a.acceleration.z)/2;
-    float ax=tilt.ax-tilt.cax; float ay=tilt.ay-tilt.cay; float az=tilt.az-tilt.caz;
-    tilt.x=wrap180((+atan2(ay,sqrt(az*az+ax*ax)))*RADtoDEG);
-    tilt.y=wrap180((-atan2(ax,sqrt(az*az+ay*ay)))*RADtoDEG);
-    tilt.d=wrap180(atan2(ax,ay)*RADtoDEG)+180;
-    tilt.xy=sqrt(ax*ax+ay*ay)/9.81*90; } }
+  if (millis()>=tiltTimer) { tiltTimer=millis()+100;
+    if (mpu.dmpGetCurrentFIFOPacket(fifoBuffer)) {
+      mpu.dmpGetQuaternion(&q,fifoBuffer);
+      mpu.dmpGetGravity(&gravity,&q);
+      mpu.dmpGetYawPitchRoll(ypr,&q,&gravity);
+      if (ypr[2]<-M_PI/2 || ypr[2]>M_PI/2) { if (ypr[1]<0) { ypr[1]=-M_PI-ypr[1]; } else { ypr[1]=M_PI-ypr[1]; } }
+      if (ypr[1]<-M_PI/2 || ypr[1]>M_PI/2) { if (ypr[2]<0) { ypr[2]=-M_PI-ypr[2]; } else { ypr[2]=M_PI-ypr[2]; } }
+      tilt.z=ypr[0]*180/M_PI; tilt.y=ypr[1]*180/M_PI; tilt.x=ypr[2]*180/M_PI;
+      tilt.d=(atan2(ypr[1],ypr[2])*180/M_PI)+180;
+      tilt.xy=sqrt(ypr[1]*ypr[1]+ypr[2]*ypr[2])*180/M_PI; } } }
 
 void setup() {
-  I2Ctwo.begin(17,16,400000); // SDA pin 17, SCL pin 16, 400kHz frequency
-  mpu.begin(0x68,&I2Ctwo);
-  mpu.setAccelerometerRange(MPU6050_RANGE_2_G); //2,4,8,16
-  mpu.setGyroRange(MPU6050_RANGE_250_DEG);      //250,500,1000,2000
-  mpu.setFilterBandwidth(MPU6050_BAND_5_HZ);    //5,10,21,44,94,184,260
-  tilt.ax=0; tilt.ay=0; tilt.az=0; tilt.cax=0; tilt.cay=0; tilt.caz=0;
-  tiltTimer=millis()+100; tiltCalibrateCount=0; }
+  I2Ctwo.begin(17,16,400000); //SDA 17,SCL 16, 400000 Hz
+  mpu.initialize();
+  mpu.dmpInitialize();
+  //mpu.setXGyroOffset(27); mpu.setYGyroOffset(-10); mpu.setZGyroOffset(53);
+  //mpu.setXAccelOffset(2400); mpu.setYAccelOffset(169); mpu.setZAccelOffset(2270);
+  calibrateTilt();
+  mpu.setDMPEnabled(true); }
 
 void loop() {
   tiltWorker();
