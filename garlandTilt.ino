@@ -3,7 +3,8 @@
 Adafruit_NeoPixel ring=Adafruit_NeoPixel(60,gpio,NEO_GRB+NEO_KHZ800);
 
 //get library from https://github.com/jrowberg/i2cdevlib/tree/master/Arduino/I2Cdev and
-//get library from https://github.com/jrowberg/i2cdevlib/tree/master/Arduino/MPU6050
+//get library from https://github.com/jrowberg/i2cdevlib/tree/master/Arduino/MPU6050 and
+//read https://github.com/jrowberg/i2cdevlib/issues/688
 #include "MPU6050_6Axis_MotionApps612.h"
 
 TwoWire I2Ctwo=TwoWire(1);
